@@ -83,8 +83,9 @@ class AnalyzeNetwork:
         for ip in remaining_ips:
             dct = {"MAC": "UNKNOWN", "IP": ip, "VENDOR": "UNKNOWN"}
 
-            if (IP in pack) and (pack[IP].src == dct["IP"]):
-                dct["TTL"] = pack[IP].ttl
+            for pack in self.packets:
+                if (IP in pack) and (pack[IP].src == dct["IP"]):
+                    dct["TTL"] = pack[IP].ttl
 
             info.append(dct)
 
@@ -116,6 +117,7 @@ class AnalyzeNetwork:
 
 
 if __name__ == "__main__":
-    network = AnalyzeNetwork("pcaps/pcap-00.pcapng")
-    for mac in network.get_macs():
-        print(network.get_info_by_mac(mac))
+    network = AnalyzeNetwork("pcaps/pcap-01.pcapng")
+    for ip in network.get_ips():
+        info = network.get_info_by_ip(ip)
+        print(info, network.guess_os(info))
