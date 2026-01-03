@@ -19,6 +19,9 @@ class AnalyzeNetwork:
             if ARP in pack:
                 for ip in [pack[ARP].psrc, pack[ARP].pdst]:
                     ips.add(ip)
+            if IP in pack:
+                for ip in [pack[IP].src, pack[IP].dst]:
+                    ips.add(ip)
         return list(ips)
 
     def get_macs(self):
@@ -57,32 +60,43 @@ class AnalyzeNetwork:
 
         info = []
         for pack in self.packets:
-            if Ether in pack:
-                dct = {}
-                flag = False
-                for item in info:
-                    if item["MAC"] == pack[Ether].src:
-                        if item["IP"] == "UNKNOWN" and (ARP in pack):
-                            dct = item
-                        else:
-                            flag = True
-                        break
+            dct = {}
 
+            if ARP in pack:
+                dct["MAC"] = pack[ARP].hwsrc
+                dct["IP"] = pack[ARP].psrc
+                dct["VENDOR"] = self.check_vendor(dct["MAC"])
+
+                if (dct not in info) and (dct != {}):
+                    info.append(dct)
+                dct = {}
+
+                if pack[Ether].src != pack[ARP].hwsrc:
+                    dct["MAC"] = pack[Ether].src
+                    dct["IP"] = "UNKNOWN"
+                    dct["VENDOR"] = self.check_vendor(dct["MAC"])
+
+                    if (dct not in info) and (dct != {}):
+                        info.append(dct)
+                    dct = {}
+
+            elif Ether in pack:
                 dct["MAC"] = pack[Ether].src
                 dct["IP"] = "UNKNOWN"
                 dct["VENDOR"] = self.check_vendor(dct["MAC"])
 
-            if flag:
-                pass
+                if (dct not in info) and (dct != {}):
+                    info.append(dct)
+                dct = {}
 
-            if ARP in pack:
-                if pack[ARP].hwsrc != pack[Ether].src:
-                    dct["IP"] = "UNKNOWN"
-                else:
-                    dct["IP"] = pack[ARP].psrc
+            if IP in pack:
+                dct["MAC"] = "UNKNOWN"
+                dct["IP"] = pack[IP].src
+                dct["VENDOR"] = "UNKNOWN"
+                dct["TTL"] = pack[IP].ttl
 
-            if dct not in info:
-                info.append(dct)
+                if (dct not in info) and (dct != {}):
+                    info.append(dct)
         return info
 
     def check_vendor(self, mac: str):
@@ -91,8 +105,27 @@ class AnalyzeNetwork:
         except Exception:
             return "UNKNOWN"
 
+    def guess_os(self, device_info: dict):
+        """ "returns assumed operating system of a device"""
+
+        if "TTL" not in device_info:
+            return ["Windows", "Linux", "Unix", "MacOs", "Router"]
+        ttl = device_info["TTL"]
+        if ttl > 128:
+            return ["Router"]
+        if ttl > 64:
+            return ["Windows"]
+        return ["Linux", "Unix", "MacOs"]
+
     def __repr__(self):
         raise NotImplementedError
 
     def __str__(self):
         raise NotImplementedError
+
+
+if __name__ == "__main__":
+    network = AnalyzeNetwork("pcaps/pcap-01.pcapng")
+    for ip in network.get_ips():
+        info = network.get_info_by_ip(ip)
+        print(ip, info, network.guess_os(info))
