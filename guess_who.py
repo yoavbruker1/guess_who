@@ -96,6 +96,18 @@ class AnalyzeNetwork:
         except Exception:
             return "UNKNOWN"
 
+    def guess_os(self, device_info: dict):
+        """ "returns assumed operating system of a device"""
+
+        if "TTL" not in device_info:
+            return ["Windows", "Linux", "Unix", "MacOs", "Router"]
+        ttl = device_info["TTL"]
+        if ttl > 128:
+            return ["Router"]
+        if ttl > 64:
+            return ["Windows"]
+        return ["Linux", "Unix", "MacOs"]
+
     def __repr__(self):
         raise NotImplementedError
 
