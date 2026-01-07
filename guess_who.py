@@ -103,11 +103,27 @@ class AnalyzeNetwork:
         if ICMP in pack:
             load = bytes(pack[ICMP].payload)
             for offset in [0, 16]:
+                # Check for load with/without timestamp (16 byte difference)
                 if len(load) >= 3 + offset:
                     if load[0 + offset : 3 + offset] == b"abc":
                         dct["PAYLOAD FORMAT"] = "Alphabet"
                     if load[0 + offset : 3 + offset] == b"\x10\x11\x12":
                         dct["PAYLOAD FORMAT"] = "BSD"
+
+        if Raw in pack:
+            load = bytes(pack[Raw])
+            if b"HTTP" in load:
+                load = str(load, "utf-8")
+                sides = {"Server: ": "Server", "User-Agent: ": "Client"}
+
+                for side in ["Server: ", "User-Agent: "]:
+                    sw_start = load.find(side)
+                    if sw_start > -1:
+                        sw_start += len(side)
+                        sw_end = sw_start + load[sw_start:].find("\r")
+
+                        dct["SOFTWARE"] = load[sw_start:sw_end]
+                        dct["SIDE"] = sides[side]
 
     def check_vendor(self, mac: str):
         """ "Checks a mac's vendor"""
@@ -147,7 +163,7 @@ class AnalyzeNetwork:
 
 
 if __name__ == "__main__":
-    network = AnalyzeNetwork("pcaps/pcap-02.pcapng")
+    network = AnalyzeNetwork("pcaps/pcap-03.pcapng")
     for ip in network.get_ips():
         info = network.get_info_by_ip(ip)
-        print(info, network.guess_os(info))
+        print(info)
