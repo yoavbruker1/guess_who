@@ -1,6 +1,9 @@
 from scapy.all import *
 from mac_vendor_lookup import MacLookup
 
+WINDOWS_TTL = 128
+LINUX_TTL = 64
+
 
 class AnalyzeNetwork:
     def __init__(self, pcap_path: str):
@@ -76,7 +79,7 @@ class AnalyzeNetwork:
                         remaining_ips.remove(dct["IP"])
 
                 if (IP in pack) and (pack[IP].src == dct["IP"]):
-                    dct["TTL"] = pack[IP].ttl
+                    self.add_info(pack, dct)
 
             info.append(dct)
 
@@ -85,13 +88,30 @@ class AnalyzeNetwork:
 
             for pack in self.packets:
                 if (IP in pack) and (pack[IP].src == dct["IP"]):
-                    dct["TTL"] = pack[IP].ttl
+                    self.add_info(pack, dct)
 
             info.append(dct)
 
         return info
 
+    def add_info(self, pack, dct):
+        """ "Adds additional info to a packet, based on layer 3+"""
+
+        if IP in pack:
+            dct["TTL"] = pack[IP].ttl
+
+        if ICMP in pack:
+            load = bytes(pack[ICMP].payload)
+            for offset in [0, 16]:
+                if len(load) >= 3 + offset:
+                    if load[0 + offset : 3 + offset] == b"abc":
+                        dct["PAYLOAD FORMAT"] = "Alphabet"
+                    if load[0 + offset : 3 + offset] == b"\x10\x11\x12":
+                        dct["PAYLOAD FORMAT"] = "BSD"
+
     def check_vendor(self, mac: str):
+        """ "Checks a mac's vendor"""
+
         try:
             return MacLookup().lookup(mac)
         except Exception:
@@ -100,14 +120,24 @@ class AnalyzeNetwork:
     def guess_os(self, device_info: dict):
         """ "returns assumed operating system of a device"""
 
-        if "TTL" not in device_info:
-            return ["Windows", "Linux", "Unix", "MacOs", "Router"]
-        ttl = device_info["TTL"]
-        if ttl > 128:
-            return ["Router"]
-        if ttl > 64:
-            return ["Windows"]
-        return ["Linux", "Unix", "MacOs"]
+        # Check for load format
+        if "PAYLOAD FORMAT" in device_info:
+            format = device_info["PAYLOAD FORMAT"]
+            if format == "Alphabet":
+                return "Windows"
+            if format == "BSD":
+                return ["Linux", "Unix", "MacOs"]
+
+        # Check for ttl
+        if "TTL" in device_info:
+            ttl = device_info["TTL"]
+            if ttl > WINDOWS_TTL:
+                return "Router"
+            if ttl > LINUX_TTL:
+                return "Windows"
+            return ["Linux", "Unix", "MacOs"]
+
+        return ["Linux", "Unix", "MacOs", "Windows", "Router"]
 
     def __repr__(self):
         raise NotImplementedError
@@ -117,7 +147,7 @@ class AnalyzeNetwork:
 
 
 if __name__ == "__main__":
-    network = AnalyzeNetwork("pcaps/pcap-01.pcapng")
+    network = AnalyzeNetwork("pcaps/pcap-02.pcapng")
     for ip in network.get_ips():
         info = network.get_info_by_ip(ip)
         print(info, network.guess_os(info))
